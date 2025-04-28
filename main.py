@@ -15,7 +15,7 @@ model_state = checkpoint["model_state_dict"]
 encoder = checkpoint["encoder_state"]
 
 # Rebuild the model (must match architecture)
-from your_model_file import MatchingModel  # <- adjust this if your model is in a specific file
+from _3pl_matching_model import MatchingModel
 
 model = MatchingModel(encoder)
 model.load_state_dict(model_state)
