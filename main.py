@@ -8,7 +8,7 @@ import numpy as np
 app = FastAPI()
 
 # Load model checkpoint
-checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'))
+checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'), weights_only=False)
 
 # Extract model and encoder
 model_state = checkpoint["model_state_dict"]
