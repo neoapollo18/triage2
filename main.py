@@ -152,9 +152,7 @@ def predict_match(data: BusinessInput):
         
         logger.info("Generating prediction")
         with torch.no_grad():
-            bus_emb, tpl_emb = model(bus_data, tpl_data)
-            similarity = (torch.cosine_similarity(bus_emb, tpl_emb) + 1) / 2
-            match_score = similarity.item()
+            match_score = model(bus_data, tpl_data).item()
         
         # Prepare result
         result = {

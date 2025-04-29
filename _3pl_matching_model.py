@@ -260,65 +260,38 @@ class TowerBlock(nn.Module):
 
 class MatchingModel(nn.Module):
     def __init__(self, encoder: FeatureEncoder):
-        super().__init__()    # business tower
+        super().__init__()
         self.business_tower = TowerBlock(
-            num_features=len(encoder.num_bus) + len(encoder.states),  # Include shipping regions
+            num_features=len(encoder.num_bus) + len(encoder.states),
             vocab_dict=encoder.vocab_bus,
             bin_features=len(encoder.bin_bus)
         )
-        
         self.threepl_tower = TowerBlock(
-            num_features=len(encoder.num_tpl) + len(encoder.states),  # Include covered states
+            num_features=len(encoder.num_tpl) + len(encoder.states),
             vocab_dict=encoder.vocab_tpl,
             bin_features=len(encoder.bin_tpl)
+        )
+
+        self.pred_head = nn.Sequential(
+            nn.Linear(Config.EMBEDDING_DIM * 3, 128),
+            nn.ReLU(),
+            nn.Dropout(Config.DROPOUT),
+            nn.Linear(128, 1),
+            nn.Sigmoid()
         )
 
     def forward(self, business_data, threepl_data):
         bus_num, bus_cat, bus_bin = business_data
         tpl_num, tpl_cat, tpl_bin = threepl_data
-        return self.business_tower(bus_num, bus_cat, bus_bin), self.threepl_tower(tpl_num, tpl_cat, tpl_bin)
 
-# ------------------------------
-# Loss Function
-# ------------------------------
+        bus_emb = self.business_tower(bus_num, bus_cat, bus_bin)
+        tpl_emb = self.threepl_tower(tpl_num, tpl_cat, tpl_bin)
 
-class ContrastiveLoss(nn.Module):
-    def __init__(self, margin=0.5, temperature=0.05):
-        super().__init__()
-        self.margin = margin
-        self.temperature = temperature
+        # Combine embeddings
+        combined = torch.cat([bus_emb, tpl_emb, bus_emb * tpl_emb], dim=1)
+        score = self.pred_head(combined)
 
-    def forward(self, business_emb, threepl_emb, labels):
-        # Cosine similarity
-        sim = F.cosine_similarity(business_emb, threepl_emb)
-        
-        # Scale to [0,1]
-        sim = (sim + 1) / 2
-        
-        # BCE loss
-        bce = F.binary_cross_entropy(sim, labels)
-        
-        # In-batch negatives
-        if business_emb.size(0) > 1:
-            # Compute all pairs similarities
-            sim_matrix = torch.matmul(business_emb, threepl_emb.t())
-            sim_matrix = (sim_matrix + 1) / 2
-            
-            # Create negative mask (excluding positive pairs)
-            neg_mask = torch.eye(business_emb.size(0), device=sim_matrix.device)
-            neg_sim = sim_matrix.masked_fill(neg_mask.bool(), -1.0)
-            
-            # Hard negative mining
-            hardest_neg = neg_sim.max(dim=1)[0]
-            
-            # Contrastive loss with hard negatives
-            contrastive = F.relu(self.margin + hardest_neg - sim).mean()
-            
-            return bce + 0.5 * contrastive
-        
-        return bce
-
-# ------------------------------
+        return score.squeeze(-1)
 # Dataset
 # ------------------------------
 
@@ -433,7 +406,7 @@ def train_cv(businesses_df, threepls_df, labeled_pairs, config=Config):
         
         # Initialize model and training components
         model = MatchingModel(encoder).to(device)
-        criterion = ContrastiveLoss()
+
         optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=config.LEARNING_RATE,
@@ -466,8 +439,8 @@ def train_cv(businesses_df, threepls_df, labeled_pairs, config=Config):
                 labels = labels.to(device)
                 
                 # Forward pass
-                bus_emb, tpl_emb = model(bus_data, tpl_data)
-                loss = criterion(bus_emb, tpl_emb, labels)
+                predicted_score = model(bus_data, tpl_data)
+                loss = F.binary_cross_entropy(predicted_score, labels)
                 
                 # Backward pass
                 optimizer.zero_grad()
@@ -475,9 +448,8 @@ def train_cv(businesses_df, threepls_df, labeled_pairs, config=Config):
                 optimizer.step()
                 scheduler.step()
                 
-                # Calculate similarity scores
-                sim = (F.cosine_similarity(bus_emb, tpl_emb) + 1) / 2
-                train_preds.extend(sim.detach().cpu().numpy())
+                # Track predictions
+                train_preds.extend(predicted_score.detach().cpu().numpy())
                 train_labels.extend(labels.cpu().numpy())
                 
                 train_loss += loss.item()
@@ -499,13 +471,12 @@ def train_cv(businesses_df, threepls_df, labeled_pairs, config=Config):
                     tpl_data = tuple(t.to(device) for t in tpl_data)
                     labels = labels.to(device)
                     
-                    bus_emb, tpl_emb = model(bus_data, tpl_data)
-                    loss = criterion(bus_emb, tpl_emb, labels)
+                    predicted_score = model(bus_data, tpl_data)
+                    loss = F.binary_cross_entropy(predicted_score, labels)
                     val_loss += loss.item()
                     
-                    # Calculate similarity scores
-                    sim = (F.cosine_similarity(bus_emb, tpl_emb) + 1) / 2
-                    val_preds.extend(sim.cpu().numpy())
+                    # Track predictions
+                    val_preds.extend(predicted_score.cpu().numpy())
                     val_labels.extend(labels.cpu().numpy())
                     
                     val_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
@@ -619,7 +590,7 @@ def run_once(businesses_df, threepls_df, labeled_pairs, rep):
     
     # Initialize model and training components
     model = MatchingModel(encoder).to(device)
-    criterion = ContrastiveLoss()
+
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config.LEARNING_RATE,
@@ -654,8 +625,8 @@ def run_once(businesses_df, threepls_df, labeled_pairs, rep):
             labels = labels.to(device)
             
             # Forward pass
-            bus_emb, tpl_emb = model(bus_data, tpl_data)
-            loss = criterion(bus_emb, tpl_emb, labels)
+            predicted_score = model(bus_data, tpl_data)
+            loss = F.binary_cross_entropy(predicted_score, labels)
             
             # Backward pass
             optimizer.zero_grad()
@@ -663,9 +634,8 @@ def run_once(businesses_df, threepls_df, labeled_pairs, rep):
             optimizer.step()
             scheduler.step()
             
-            # Calculate similarity scores
-            sim = (F.cosine_similarity(bus_emb, tpl_emb) + 1) / 2
-            train_preds.extend(sim.detach().cpu().numpy())
+            # Track predictions
+            train_preds.extend(predicted_score.detach().cpu().numpy())
             train_labels.extend(labels.cpu().numpy())
             
             train_loss += loss.item()
@@ -687,13 +657,12 @@ def run_once(businesses_df, threepls_df, labeled_pairs, rep):
                 tpl_data = tuple(t.to(device) for t in tpl_data)
                 labels = labels.to(device)
                 
-                bus_emb, tpl_emb = model(bus_data, tpl_data)
-                loss = criterion(bus_emb, tpl_emb, labels)
+                predicted_score = model(bus_data, tpl_data)
+                loss = F.binary_cross_entropy(predicted_score, labels)
                 val_loss += loss.item()
                 
-                # calculate similarity scores
-                sim = (F.cosine_similarity(bus_emb, tpl_emb) + 1) / 2
-                val_preds.extend(sim.cpu().numpy())
+                # Track predictions
+                val_preds.extend(predicted_score.cpu().numpy())
                 val_labels.extend(labels.cpu().numpy())
                 
                 val_pbar.set_postfix({'loss': f'{loss.item():.4f}'})

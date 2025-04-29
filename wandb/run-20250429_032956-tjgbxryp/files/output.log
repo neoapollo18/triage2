@@ -1,0 +1,32 @@
+
+
+
+
+
+Epoch 1/25 [Train]: 100%|████████████| 19/19 [00:33<00:00,  1.75s/it, loss=0.6943]
+Traceback (most recent call last):
+  File "/Users/charles/Documents/C++_Files/CompSci_Projects/triage2/_3pl_matching_model.py", line 734, in <module>
+  File "/Users/charles/Documents/C++_Files/CompSci_Projects/triage2/_3pl_matching_model.py", line 623, in run_once
+    bus_data = tuple(t.to(device) for t in bus_data)
+  File "/Users/charles/miniconda3/envs/clinicaltrials/lib/python3.11/site-packages/tqdm/std.py", line 1178, in __iter__
+    for obj in iterable:
+  File "/Users/charles/miniconda3/envs/clinicaltrials/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 631, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "/Users/charles/miniconda3/envs/clinicaltrials/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1318, in _next_data
+    self._shutdown_workers()
+  File "/Users/charles/miniconda3/envs/clinicaltrials/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1443, in _shutdown_workers
+    w.join(timeout=_utils.MP_STATUS_CHECK_INTERVAL)
+  File "/Users/charles/miniconda3/envs/clinicaltrials/lib/python3.11/multiprocessing/process.py", line 149, in join
+    res = self._popen.wait(timeout)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charles/miniconda3/envs/clinicaltrials/lib/python3.11/multiprocessing/popen_fork.py", line 40, in wait
+    if not wait([self.sentinel], timeout):
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charles/miniconda3/envs/clinicaltrials/lib/python3.11/multiprocessing/connection.py", line 930, in wait
+    ready = selector.select(timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/charles/miniconda3/envs/clinicaltrials/lib/python3.11/selectors.py", line 415, in select
+    fd_event_list = self._selector.poll(timeout)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

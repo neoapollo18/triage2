@@ -1,0 +1,42 @@
+{
+    "os": "macOS-10.16-x86_64-i386-64bit",
+    "python": "3.11.4",
+    "heartbeatAt": "2025-04-29T10:29:57.175479",
+    "startedAt": "2025-04-29T10:29:56.720270",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/Users/charles/Documents/C++_Files/CompSci_Projects/triage2/_3pl_matching_model.py",
+    "codePath": "_3pl_matching_model.py",
+    "git": {
+        "remote": "https://github.com/neoapollo18/triage2.git",
+        "commit": "07b50d19d09a85dbc6f0388219277cebe76f25b5"
+    },
+    "email": "69323699+CreatorGao@users.noreply.github.com",
+    "root": "/Users/charles/Documents/C++_Files/CompSci_Projects/triage2",
+    "host": "Charless-MacBook-Pro-3.local",
+    "username": "charles",
+    "executable": "/Users/charles/miniconda3/envs/clinicaltrials/bin/python3",
+    "cpu_count": 12,
+    "cpu_count_logical": 12,
+    "cpu_freq": {
+        "current": 2400,
+        "min": 2400,
+        "max": 2400
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2400,
+            "min": 2400,
+            "max": 2400
+        }
+    ],
+    "disk": {
+        "total": 926.3517189025879,
+        "used": 14.890636444091797
+    },
+    "memory": {
+        "total": 32.0
+    }
+}
