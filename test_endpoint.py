@@ -1,6 +1,6 @@
 import requests
 
-url = "https://triage2-production-d980.up.railway.app/predict"  # Your deployed API endpoint
+url = "https://triage2-production-ac73.up.railway.app/predict"  # Your deployed API endpoint
 
 payload = {
   "business": {
@@ -20,7 +20,7 @@ payload = {
     "growth_velocity_pct": 15,
     "temperature_control_needed": "no",
     "dimensional_weight_class": "light",
-    "top_shipping_regions": "CA:0.5;NY:0.3;TX:0.2",
+    "top_shipping_regions": "NY:0.98;NC:0.02",
     "industry_Fashion": 1,
     "industry_Electronics": 0,
     "industry_Home": 0,
@@ -40,7 +40,8 @@ payload = {
     "available_storage_sqft": 250000,
     "headquarters_state": "CA",
     "num_warehouses": 8,
-    "service_coverage": "CA;NY;NV;AZ"
+    "service_coverage": "CA;NY;NV;AZ",
+    "covered_states": "CA;NY;NV;AZ"
   }
 }
 

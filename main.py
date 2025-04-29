@@ -125,6 +125,20 @@ def predict_match(data: BusinessInput):
                     logger.warning(f"Missing 3PL feature: {col}, filling with 0")
                     tpl_df[col] = 0
         
+        # Handle missing shipping regions and covered states
+        if 'top_shipping_regions' not in bus_df.columns:
+            logger.warning("Missing top_shipping_regions, using default NY:0.98;NC:0.02")
+            bus_df['top_shipping_regions'] = "NY:0.98;NC:0.02"
+        
+        if 'covered_states' not in tpl_df.columns:
+            # Get states from service_coverage if available
+            if 'service_coverage' in tpl_df.columns:
+                logger.warning("Missing covered_states, using service_coverage value")
+                tpl_df['covered_states'] = tpl_df['service_coverage']
+            else:
+                logger.warning("Missing covered_states, using default NY;NC")
+                tpl_df['covered_states'] = "NY;NC"
+        
         # Encode features
         logger.info("Encoding business data")
         bus_num, bus_cat, bus_bin = encoder.encode_business(bus_df)
