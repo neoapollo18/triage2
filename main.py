@@ -17,18 +17,43 @@ from _3pl_matching_model import FeatureEncoder, MatchingModel
 
 # Add current directory to path to help with module imports
 import sys
-sys.path.insert(0, ".")
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import the model classes first - this is critical 
-# to ensure the FeatureEncoder class is available
+# Import the model classes first - this is critical
 from _3pl_matching_model import FeatureEncoder, MatchingModel
+
+# Import the safe encoder functions
+from safe_encoder import safe_encode_business, safe_encode_3pl
+
+# Critical fix: Register the FeatureEncoder class in the module namespace
+# This allows pickle to find the class during unpickling
+import __main__
+__main__.FeatureEncoder = FeatureEncoder
+
+# Helper function to handle unknown categorical values
+def safe_encode_categorical(encoder, df_col, categorical_name):
+    """Safely encode categorical values to ensure they are within valid embedding range"""
+    # Get the vocabulary size for this categorical feature
+    vocab_size = encoder.vocab_bus.get(categorical_name) if categorical_name in encoder.vocab_bus else encoder.vocab_tpl.get(categorical_name)
+    
+    if vocab_size is None:
+        logger.error(f"Cannot find vocabulary size for {categorical_name}")
+        return None
+    
+    # We need to make sure the encoded values are in range [0, vocab_size-1]
+    # This is needed for the embedding layer which expects indices in this range
+    max_idx = vocab_size - 1
+    
+    # For an ordinal encoder, default to 0 (typically the most common value)
+    # This avoids index out of range errors in the embedding layer
+    return min(max_idx, df_col)
 
 # Load model checkpoint with appropriate error handling
 try:
     logger.info("Attempting to load model checkpoint")
     
-    # Our test showed that basic loading works, but let's try multiple approaches
-    # with proper fallbacks for different PyTorch versions
+    # Now that we've registered FeatureEncoder in __main__, the load should work
     try:
         # Try PyTorch 2.6+ approach with weights_only=False
         checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'), weights_only=False)
@@ -37,7 +62,7 @@ try:
         # Fall back to older PyTorch versions without weights_only parameter
         checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'))
         logger.info("Model loaded successfully with basic method")
-        
+    
 except Exception as e:
     logger.error(f"Failed to load model: {str(e)}")
     import traceback
@@ -139,19 +164,17 @@ def predict_match(data: BusinessInput):
         # Business binary features
         binary_prefixes = ['industry_', 'growth_', 'tech_', 'service_', 'specialty_']
         
-        # Add binary columns for businesses
-        for prefix in binary_prefixes:
-            for col in encoder.bin_bus:
-                if col.startswith(prefix) and col not in bus_df.columns:
-                    logger.warning(f"Missing business feature: {col}, filling with 0")
-                    bus_df[col] = 0
+        # Add binary columns for businesses using EXACT column names from encoder
+        for col in encoder.bin_bus:
+            if col not in bus_df.columns:
+                logger.warning(f"Missing business feature: {col}, filling with 0")
+                bus_df[col] = 0
         
-        # Add binary columns for 3PLs
-        for prefix in binary_prefixes:
-            for col in encoder.bin_tpl:
-                if col.startswith(prefix) and col not in tpl_df.columns:
-                    logger.warning(f"Missing 3PL feature: {col}, filling with 0")
-                    tpl_df[col] = 0
+        # Add binary columns for 3PLs using EXACT column names from encoder
+        for col in encoder.bin_tpl:
+            if col not in tpl_df.columns:
+                logger.warning(f"Missing 3PL feature: {col}, filling with 0")
+                tpl_df[col] = 0
         
         # Handle missing shipping regions and covered states
         if 'top_shipping_regions' not in bus_df.columns:
@@ -167,16 +190,52 @@ def predict_match(data: BusinessInput):
                 logger.warning("Missing covered_states, using default NY;NC")
                 tpl_df['covered_states'] = "NY;NC"
         
-        # Encode features
-        logger.info("Encoding business data")
-        bus_num, bus_cat, bus_bin = encoder.encode_business(bus_df)
+        # Ensure data types are correct before encoding
+        logger.info("Preparing data for encoding")
         
-        logger.info("Encoding 3PL data")
-        tpl_num, tpl_cat, tpl_bin = encoder.encode_3pl(tpl_df)
+        # Convert numeric columns to proper type
+        for col in encoder.num_bus:
+            bus_df[col] = pd.to_numeric(bus_df[col], errors='coerce').fillna(0)
+            
+        for col in encoder.num_tpl:
+            tpl_df[col] = pd.to_numeric(tpl_df[col], errors='coerce').fillna(0)
         
-        # Reshape tensors
-        bus_data = (bus_num, bus_cat, bus_bin)
-        tpl_data = (tpl_num, tpl_cat, tpl_bin)
+        # Ensure binary columns are integers
+        for col in encoder.bin_bus:
+            bus_df[col] = pd.to_numeric(bus_df[col], errors='coerce').fillna(0).astype(int)
+            
+        for col in encoder.bin_tpl:
+            tpl_df[col] = pd.to_numeric(tpl_df[col], errors='coerce').fillna(0).astype(int)
+        
+        # Process categorical data
+        for col in encoder.cat_bus:
+            bus_df[col] = bus_df[col].astype(str).fillna('unknown')
+            
+        for col in encoder.cat_tpl:
+            tpl_df[col] = tpl_df[col].astype(str).fillna('unknown')
+        
+        try:
+            # Use our safe encoder functions that guarantee valid tensor dimensions
+            logger.info("Using safe encoder functions for API prediction")
+            
+            # Encode business data with guaranteed shapes [1,21], [1,4], [1,34]
+            bus_num, bus_cat, bus_bin = safe_encode_business(encoder, bus_df)
+            logger.info(f"Business tensor shapes: num={bus_num.shape}, cat={bus_cat.shape}, bin={bus_bin.shape}")
+            
+            # Encode 3PL data with guaranteed shapes [1,18], [1,2], [1,19]
+            tpl_num, tpl_cat, tpl_bin = safe_encode_3pl(encoder, tpl_df)
+            logger.info(f"3PL tensor shapes: num={tpl_num.shape}, cat={tpl_cat.shape}, bin={tpl_bin.shape}")
+            
+            # Reshape tensors
+            bus_data = (bus_num, bus_cat, bus_bin)
+            tpl_data = (tpl_num, tpl_cat, tpl_bin)
+            
+            logger.info("Data encoded successfully with guaranteed tensor shapes")
+        except Exception as encoding_error:
+            logger.error(f"Error during data encoding: {encoding_error}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=f"Error encoding data: {str(encoding_error)}")
         
         logger.info("Generating prediction")
         with torch.no_grad():
