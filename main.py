@@ -15,32 +15,28 @@ app = FastAPI(title="3PL Matching API", description="API for matching businesses
 # Import the model classes first
 from _3pl_matching_model import FeatureEncoder, MatchingModel
 
-# We'll use a custom unpickler to handle module path differences when loading the model
+# Add current directory to path to help with module imports
+import sys
+sys.path.insert(0, ".")
 
-# Load model checkpoint with custom unpickler
+# Import the model classes first - this is critical 
+# to ensure the FeatureEncoder class is available
+from _3pl_matching_model import FeatureEncoder, MatchingModel
+
+# Load model checkpoint with appropriate error handling
 try:
-    logger.info("Attempting to load model using custom unpickler")
-    import pickle
-    import io
+    logger.info("Attempting to load model checkpoint")
     
-    # Create a proper subclass of Unpickler
-    class CustomUnpickler(pickle.Unpickler):
-        def find_class(self, module_name, name):
-            # If trying to load FeatureEncoder from __main__, use our imported version
-            if module_name == '__main__' and name == 'FeatureEncoder':
-                logger.info(f"Redirecting {module_name}.{name} to imported FeatureEncoder")
-                return FeatureEncoder
-            # Otherwise, use the default behavior
-            return super().find_class(module_name, name)
-    
-    # Read the file manually
-    with open("best_model.pt", "rb") as f:
-        # Create our custom unpickler
-        unpickler = CustomUnpickler(f)
-        
-        # Load the checkpoint
-        checkpoint = unpickler.load()
-        logger.info("Model loaded successfully with custom unpickler")
+    # Our test showed that basic loading works, but let's try multiple approaches
+    # with proper fallbacks for different PyTorch versions
+    try:
+        # Try PyTorch 2.6+ approach with weights_only=False
+        checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'), weights_only=False)
+        logger.info("Model loaded successfully with weights_only=False parameter")
+    except TypeError:
+        # Fall back to older PyTorch versions without weights_only parameter
+        checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'))
+        logger.info("Model loaded successfully with basic method")
         
 except Exception as e:
     logger.error(f"Failed to load model: {str(e)}")
