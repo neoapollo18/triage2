@@ -12,27 +12,45 @@ logger = logging.getLogger(__name__)
 # Initialize app
 app = FastAPI(title="3PL Matching API", description="API for matching businesses with 3PL providers")
 
-# Import FeatureEncoder first to make it available for model loading
+# Import the model classes first
 from _3pl_matching_model import FeatureEncoder, MatchingModel
 
-# Add FeatureEncoder to the safe globals list for PyTorch 2.6+ security
-try:
-    # PyTorch 2.6+ way
-    from torch.serialization import add_safe_globals
-    add_safe_globals([('__main__', 'FeatureEncoder')])
-except ImportError:
-    # Fallback for older PyTorch versions
-    pass
+# Create a special pickle loader that can handle module path differences
+class ModelLoader:
+    def __init__(self):
+        # Store the original FeatureEncoder class
+        self.original_feature_encoder = FeatureEncoder
+        
+    def find_class(self, module_name, name):
+        # If trying to load FeatureEncoder from __main__, use our imported version
+        if module_name == '__main__' and name == 'FeatureEncoder':
+            logger.info(f"Redirecting {module_name}.{name} to imported FeatureEncoder")
+            return self.original_feature_encoder
+        # Otherwise, use the default behavior
+        import importlib
+        module = importlib.import_module(module_name)
+        return getattr(module, name)
 
-# Load model checkpoint
+# Load model checkpoint with custom unpickler
 try:
-    # Try with weights_only=False for PyTorch 2.6+
-    checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'), weights_only=False)
-except TypeError:
-    # Fallback for older PyTorch versions that don't have weights_only parameter
-    checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'))
+    logger.info("Attempting to load model using custom unpickler")
+    import pickle
+    import io
+    
+    # Read the file manually
+    with open("best_model.pt", "rb") as f:
+        # Create our custom unpickler
+        unpickler = pickle.Unpickler(f)
+        unpickler.find_class = ModelLoader().find_class
+        
+        # Load the checkpoint
+        checkpoint = unpickler.load()
+        logger.info("Model loaded successfully with custom unpickler")
+        
 except Exception as e:
     logger.error(f"Failed to load model: {str(e)}")
+    import traceback
+    logger.error(traceback.format_exc())
     raise
 
 # Extract model and encoder
