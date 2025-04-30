@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="3PL Matching API", description="API for matching businesses with 3PL providers")
 
 # Load model checkpoint
-checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'), weights_only=False)
+checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'))
 
 # Extract model and encoder
 model_state = checkpoint["model_state_dict"]
