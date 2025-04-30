@@ -12,15 +12,34 @@ logger = logging.getLogger(__name__)
 # Initialize app
 app = FastAPI(title="3PL Matching API", description="API for matching businesses with 3PL providers")
 
+# Import FeatureEncoder first to make it available for model loading
+from _3pl_matching_model import FeatureEncoder, MatchingModel
+
+# Add FeatureEncoder to the safe globals list for PyTorch 2.6+ security
+try:
+    # PyTorch 2.6+ way
+    from torch.serialization import add_safe_globals
+    add_safe_globals([('__main__', 'FeatureEncoder')])
+except ImportError:
+    # Fallback for older PyTorch versions
+    pass
+
 # Load model checkpoint
-checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'))
+try:
+    # Try with weights_only=False for PyTorch 2.6+
+    checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'), weights_only=False)
+except TypeError:
+    # Fallback for older PyTorch versions that don't have weights_only parameter
+    checkpoint = torch.load("best_model.pt", map_location=torch.device('cpu'))
+except Exception as e:
+    logger.error(f"Failed to load model: {str(e)}")
+    raise
 
 # Extract model and encoder
 model_state = checkpoint["model_state_dict"]
 encoder = checkpoint["encoder_state"]
 
 # Rebuild the model (must match architecture)
-from _3pl_matching_model import MatchingModel
 
 model = MatchingModel(encoder)
 model.load_state_dict(model_state)
