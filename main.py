@@ -15,21 +15,7 @@ app = FastAPI(title="3PL Matching API", description="API for matching businesses
 # Import the model classes first
 from _3pl_matching_model import FeatureEncoder, MatchingModel
 
-# Create a special pickle loader that can handle module path differences
-class ModelLoader:
-    def __init__(self):
-        # Store the original FeatureEncoder class
-        self.original_feature_encoder = FeatureEncoder
-        
-    def find_class(self, module_name, name):
-        # If trying to load FeatureEncoder from __main__, use our imported version
-        if module_name == '__main__' and name == 'FeatureEncoder':
-            logger.info(f"Redirecting {module_name}.{name} to imported FeatureEncoder")
-            return self.original_feature_encoder
-        # Otherwise, use the default behavior
-        import importlib
-        module = importlib.import_module(module_name)
-        return getattr(module, name)
+# We'll use a custom unpickler to handle module path differences when loading the model
 
 # Load model checkpoint with custom unpickler
 try:
@@ -37,11 +23,20 @@ try:
     import pickle
     import io
     
+    # Create a proper subclass of Unpickler
+    class CustomUnpickler(pickle.Unpickler):
+        def find_class(self, module_name, name):
+            # If trying to load FeatureEncoder from __main__, use our imported version
+            if module_name == '__main__' and name == 'FeatureEncoder':
+                logger.info(f"Redirecting {module_name}.{name} to imported FeatureEncoder")
+                return FeatureEncoder
+            # Otherwise, use the default behavior
+            return super().find_class(module_name, name)
+    
     # Read the file manually
     with open("best_model.pt", "rb") as f:
         # Create our custom unpickler
-        unpickler = pickle.Unpickler(f)
-        unpickler.find_class = ModelLoader().find_class
+        unpickler = CustomUnpickler(f)
         
         # Load the checkpoint
         checkpoint = unpickler.load()
